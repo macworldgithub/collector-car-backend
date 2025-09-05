@@ -1,4 +1,3 @@
-
 // import {
 //   Body,
 //   Controller,
@@ -17,8 +16,10 @@
 // import { diskStorage } from 'multer';
 // import { ApiBody, ApiConsumes, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 // import { v4 as uuidv4 } from 'uuid';
-// import { extname } from 'path';
+// import { extname, join, basename } from 'path';
 // import { Car } from '../schemas/car.schema';
+// import * as sharp from 'sharp';
+// import { promises as fs } from 'fs';
 
 // @ApiTags('cars')
 // @Controller('cars')
@@ -81,7 +82,7 @@
 //       storage: diskStorage({
 //         destination: './public/uploads/cars',
 //         filename: (req, file, cb) => {
-//           const uniqueName = uuidv4() + extname(file.originalname);
+//           const uniqueName = `${uuidv4()}${extname(file.originalname)}`;
 //           cb(null, uniqueName);
 //         },
 //       }),
@@ -91,7 +92,31 @@
 //     @Body() createCarDto: CreateCarDto,
 //     @UploadedFiles() images: Express.Multer.File[],
 //   ) {
-//     const imagePaths = images.map((file) => `/uploads/cars/${file.filename}`);
+//     const imagePaths: string[] = [];
+
+//     for (const file of images) {
+//       try {
+//         const outputPath = join('./public/uploads/cars', `${uuidv4()}.webp`);
+
+//         // Read file into buffer to avoid file lock issues
+//         const buffer = await fs.readFile(file.path);
+
+//         // Convert to WebP from buffer
+//         await sharp(buffer)
+//           .toFormat('webp')
+//           .toFile(outputPath);
+
+//         // Delete the original file after processing
+//         await fs.unlink(file.path).catch((err) => {
+//           console.warn(`Failed to delete original file ${file.path}: ${err.message}`);
+//         });
+
+//         imagePaths.push(`/uploads/cars/${basename(outputPath)}`);
+//       } catch (error) {
+//         console.error(`Error processing file ${file.filename}: ${error.message}`);
+//       }
+//     }
+
 //     return this.carsService.create({
 //       ...createCarDto,
 //       images: imagePaths,
@@ -115,48 +140,75 @@
 //   }
 
 //   @Patch(':id')
-//   @ApiOperation({ summary: 'Update a car by ID (with optional image upload)' })
-//   @ApiParam({ name: 'id', description: 'Car ID', type: String })
-//   @ApiConsumes('multipart/form-data')
-//   @ApiBody({
-//     description: 'Update car with optional new images',
-//     schema: {
-//       type: 'object',
-//       properties: {
-//         title: { type: 'string', example: 'Updated Ford Mustang' },
-//         price: { type: 'number', example: 50000 },
-//         status: { type: 'string', enum: ['unsold', 'sold'], example: 'sold' },
-//         images: {
-//           type: 'array',
-//           items: { type: 'string', format: 'binary' },
-//         },
+// @ApiOperation({ summary: 'Update a car by ID (with optional image upload)' })
+// @ApiParam({ name: 'id', description: 'Car ID', type: String })
+// @ApiConsumes('multipart/form-data')
+// @ApiBody({
+//   description: 'Update car with optional new images',
+//   schema: {
+//     type: 'object',
+//     properties: {
+//       title: { type: 'string', example: 'Updated Ford Mustang' },
+//       price: { type: 'number', example: 50000 },
+//       status: { type: 'string', enum: ['unsold', 'sold'], example: 'sold' },
+//       images: {
+//         type: 'array',
+//         items: { type: 'string', format: 'binary' },
 //       },
 //     },
-//   })
-//   @ApiResponse({ status: 200, description: 'Car updated successfully', type: Car })
-//   @ApiResponse({ status: 404, description: 'Car not found' })
-//   @UseInterceptors(
-//     FilesInterceptor('images', 10, {
-//       storage: diskStorage({
-//         destination: './public/uploads/cars',
-//         filename: (req, file, cb) => {
-//           const uniqueName = uuidv4() + extname(file.originalname);
-//           cb(null, uniqueName);
-//         },
-//       }),
+//   },
+// })
+// @ApiResponse({ status: 200, description: 'Car updated successfully', type: Car })
+// @ApiResponse({ status: 404, description: 'Car not found' })
+// @UseInterceptors(
+//   FilesInterceptor('images', 10, {
+//     storage: diskStorage({
+//       destination: './public/uploads/cars',
+//       filename: (req, file, cb) => {
+//         const uniqueName = `${uuidv4()}${extname(file.originalname)}`;
+//         cb(null, uniqueName);
+//       },
 //     }),
-//   )
-//   async updateCar(
-//     @Param('id') id: string,
-//     @Body() updateCarDto: UpdateCarDto,
-//     @UploadedFiles() images?: Express.Multer.File[],
-//   ) {
-//     const imagePaths = images ? images.map((file) => `/uploads/cars/${file.filename}`) : [];
-//     return this.carsService.update(id, {
-//       ...updateCarDto,
-//       ...(imagePaths.length > 0 && { images: imagePaths }),
-//     });
+//   }),
+// )
+// async updateCar(
+//   @Param('id') id: string,
+//   @Body() updateCarDto: UpdateCarDto,
+//   @UploadedFiles() images?: Express.Multer.File[],
+// ) {
+//   const imagePaths: string[] = [];
+
+//   if (images && images.length > 0) {
+//     for (const file of images) {
+//       try {
+//         const outputPath = join('./public/uploads/cars', `${uuidv4()}.webp`);
+
+//         // Read file into buffer to avoid file lock issues (same fix as POST)
+//         const buffer = await fs.readFile(file.path);
+
+//         // Convert to WebP
+//         await sharp(buffer)
+//           .toFormat('webp')
+//           .toFile(outputPath);
+
+//         // Delete original uploaded file
+//         await fs.unlink(file.path).catch((err) => {
+//           console.warn(`Failed to delete original file ${file.path}: ${err.message}`);
+//         });
+
+//         imagePaths.push(`/uploads/cars/${basename(outputPath)}`);
+//       } catch (error) {
+//         console.error(`Error processing file ${file.filename}: ${error.message}`);
+//       }
+//     }
 //   }
+
+//   return this.carsService.update(id, {
+//     ...updateCarDto,
+//     ...(imagePaths.length > 0 && { images: imagePaths }),
+//   });
+// }
+
 
 //   @Patch(':id/sold')
 //   @ApiOperation({ summary: 'Mark a car as sold' })
@@ -187,18 +239,22 @@ import {
   Post,
   UploadedFiles,
   UseInterceptors,
+  UseGuards,
 } from '@nestjs/common';
 import { CarsService } from './cars.service';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { ApiBody, ApiConsumes, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBody, ApiConsumes, ApiOperation, ApiParam, ApiResponse, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { v4 as uuidv4 } from 'uuid';
 import { extname, join, basename } from 'path';
 import { Car } from '../schemas/car.schema';
 import * as sharp from 'sharp';
 import { promises as fs } from 'fs';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentUser } from '../auth/current-user.decorator';
+import { User } from '../schemas/user.schema';
 
 @ApiTags('cars')
 @Controller('cars')
@@ -206,6 +262,8 @@ export class CarsController {
   constructor(private readonly carsService: CarsService) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new car' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -270,6 +328,7 @@ export class CarsController {
   async createCar(
     @Body() createCarDto: CreateCarDto,
     @UploadedFiles() images: Express.Multer.File[],
+    @CurrentUser() user: User & { _id: string },
   ) {
     const imagePaths: string[] = [];
 
@@ -277,15 +336,11 @@ export class CarsController {
       try {
         const outputPath = join('./public/uploads/cars', `${uuidv4()}.webp`);
 
-        // Read file into buffer to avoid file lock issues
         const buffer = await fs.readFile(file.path);
-
-        // Convert to WebP from buffer
         await sharp(buffer)
           .toFormat('webp')
           .toFile(outputPath);
 
-        // Delete the original file after processing
         await fs.unlink(file.path).catch((err) => {
           console.warn(`Failed to delete original file ${file.path}: ${err.message}`);
         });
@@ -296,10 +351,7 @@ export class CarsController {
       }
     }
 
-    return this.carsService.create({
-      ...createCarDto,
-      images: imagePaths,
-    });
+    return this.carsService.create(createCarDto, user._id, imagePaths);
   }
 
   @Get()
@@ -319,91 +371,93 @@ export class CarsController {
   }
 
   @Patch(':id')
-@ApiOperation({ summary: 'Update a car by ID (with optional image upload)' })
-@ApiParam({ name: 'id', description: 'Car ID', type: String })
-@ApiConsumes('multipart/form-data')
-@ApiBody({
-  description: 'Update car with optional new images',
-  schema: {
-    type: 'object',
-    properties: {
-      title: { type: 'string', example: 'Updated Ford Mustang' },
-      price: { type: 'number', example: 50000 },
-      status: { type: 'string', enum: ['unsold', 'sold'], example: 'sold' },
-      images: {
-        type: 'array',
-        items: { type: 'string', format: 'binary' },
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update a car by ID (with optional image upload)' })
+  @ApiParam({ name: 'id', description: 'Car ID', type: String })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Update car with optional new images',
+    schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', example: 'Updated Ford Mustang' },
+        price: { type: 'number', example: 50000 },
+        status: { type: 'string', enum: ['unsold', 'sold'], example: 'sold' },
+        images: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+        },
       },
     },
-  },
-})
-@ApiResponse({ status: 200, description: 'Car updated successfully', type: Car })
-@ApiResponse({ status: 404, description: 'Car not found' })
-@UseInterceptors(
-  FilesInterceptor('images', 10, {
-    storage: diskStorage({
-      destination: './public/uploads/cars',
-      filename: (req, file, cb) => {
-        const uniqueName = `${uuidv4()}${extname(file.originalname)}`;
-        cb(null, uniqueName);
-      },
+  })
+  @ApiResponse({ status: 200, description: 'Car updated successfully', type: Car })
+  @ApiResponse({ status: 404, description: 'Car not found' })
+  @UseInterceptors(
+    FilesInterceptor('images', 10, {
+      storage: diskStorage({
+        destination: './public/uploads/cars',
+        filename: (req, file, cb) => {
+          const uniqueName = `${uuidv4()}${extname(file.originalname)}`;
+          cb(null, uniqueName);
+        },
+      }),
     }),
-  }),
-)
-async updateCar(
-  @Param('id') id: string,
-  @Body() updateCarDto: UpdateCarDto,
-  @UploadedFiles() images?: Express.Multer.File[],
-) {
-  const imagePaths: string[] = [];
+  )
+  async updateCar(
+    @Param('id') id: string,
+    @Body() updateCarDto: UpdateCarDto,
+    @CurrentUser() user: User & { _id: string },
+    @UploadedFiles() images?: Express.Multer.File[],
+  ) {
+    const imagePaths: string[] = [];
 
-  if (images && images.length > 0) {
-    for (const file of images) {
-      try {
-        const outputPath = join('./public/uploads/cars', `${uuidv4()}.webp`);
+    if (images && images.length > 0) {
+      for (const file of images) {
+        try {
+          const outputPath = join('./public/uploads/cars', `${uuidv4()}.webp`);
 
-        // Read file into buffer to avoid file lock issues (same fix as POST)
-        const buffer = await fs.readFile(file.path);
+          const buffer = await fs.readFile(file.path);
+          await sharp(buffer)
+            .toFormat('webp')
+            .toFile(outputPath);
 
-        // Convert to WebP
-        await sharp(buffer)
-          .toFormat('webp')
-          .toFile(outputPath);
+          await fs.unlink(file.path).catch((err) => {
+            console.warn(`Failed to delete original file ${file.path}: ${err.message}`);
+          });
 
-        // Delete original uploaded file
-        await fs.unlink(file.path).catch((err) => {
-          console.warn(`Failed to delete original file ${file.path}: ${err.message}`);
-        });
-
-        imagePaths.push(`/uploads/cars/${basename(outputPath)}`);
-      } catch (error) {
-        console.error(`Error processing file ${file.filename}: ${error.message}`);
+          imagePaths.push(`/uploads/cars/${basename(outputPath)}`);
+        } catch (error) {
+          console.error(`Error processing file ${file.filename}: ${error.message}`);
+        }
       }
     }
+
+    return this.carsService.update(id, {
+      ...updateCarDto,
+      ...(imagePaths.length > 0 && { images: imagePaths }),
+    }, user._id);
   }
 
-  return this.carsService.update(id, {
-    ...updateCarDto,
-    ...(imagePaths.length > 0 && { images: imagePaths }),
-  });
-}
-
-
   @Patch(':id/sold')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Mark a car as sold' })
   @ApiParam({ name: 'id', description: 'Car ID', type: String })
   @ApiResponse({ status: 200, description: 'Car marked as sold', type: Car })
   @ApiResponse({ status: 404, description: 'Car not found' })
-  async markAsSold(@Param('id') id: string) {
-    return this.carsService.markAsSold(id);
+  async markAsSold(@Param('id') id: string, @CurrentUser() user: User & { _id: string }) {
+    return this.carsService.markAsSold(id, user._id);
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a car by ID' })
   @ApiParam({ name: 'id', description: 'Car ID', type: String })
   @ApiResponse({ status: 200, description: 'Car deleted successfully' })
   @ApiResponse({ status: 404, description: 'Car not found' })
-  async removeCar(@Param('id') id: string) {
-    return this.carsService.remove(id);
+  async removeCar(@Param('id') id: string, @CurrentUser() user: User & { _id: string }) {
+    return this.carsService.remove(id, user._id);
   }
 }
